@@ -7,6 +7,8 @@ flood / subsidence / fire scores, 10-year depreciation).
 Built with Vite + Vue 3 + vue-leaflet (OpenStreetMap tiles, no API keys) +
 Chart.js + GSAP.
 
+![GeoRisk Inspector screenshot](screenshots/georisk-vue.png)
+
 > **Netherlands only.** The risk model uses the Dutch RD New projection
 > (EPSG:28992), PDOK elevation data, and Dutch soil/flood logic. Search and
 > coordinates are restricted to the NL bounding box.
