@@ -1,0 +1,53 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Flood zone A — Noordereiland", "risk": "high" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [4.469, 51.9175],
+            [4.485, 51.9175],
+            [4.485, 51.9245],
+            [4.469, 51.9245],
+            [4.469, 51.9175]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Flood zone B — Feijenoord", "risk": "medium" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [4.485, 51.9245],
+            [4.502, 51.9245],
+            [4.502, 51.932],
+            [4.485, 51.932],
+            [4.485, 51.9245]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Flood zone C — Katendrecht", "risk": "low" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [4.462, 51.9075],
+            [4.478, 51.9075],
+            [4.478, 51.915],
+            [4.462, 51.915],
+            [4.462, 51.9075]
+          ]
+        ]
+      }
+    }
+  ]
+}

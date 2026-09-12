@@ -1,0 +1,11 @@
+# dependencies (reinstall via pnpm install)
+node_modules/
+
+# build output (regenerate via pnpm run build)
+dist/
+
+# lockfile not in use (pnpm-lock.yaml is canonical)
+package-lock.json
+
+# macOS metadata
+.DS_Store
