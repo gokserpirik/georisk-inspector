@@ -1,4 +1,7 @@
-const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
+const LOCATIESERVER = 'https://api.pdok.nl/bzk/locatieserver/search/v3_1'
+
+// Locations relevant to this tool: addresses, places and cadastral parcels.
+const SUGGEST_FQ = 'type:(adres OR woonplaats OR perceel)'
 
 // Risk model covers the Netherlands only (RD New projection, PDOK, Bodemkaart).
 export const NL_BBOX = { minLat: 50.75, maxLat: 53.7, minLng: 3.2, maxLng: 7.22 }
@@ -25,16 +28,50 @@ export function parseLatLng(input) {
   return { lat, lng }
 }
 
-export async function searchPlaces(query, signal) {
-  const res = await fetch(
-    `${NOMINATIM_URL}?format=jsonv2&limit=5&countrycodes=nl&q=${encodeURIComponent(query)}`,
-    { signal, headers: { Accept: 'application/json' } },
-  )
-  if (!res.ok) throw new Error(`Geocoding failed (${res.status})`)
-  const items = await res.json()
-  return items.map((it) => ({
-    label: it.display_name,
-    lat: Number(it.lat),
-    lng: Number(it.lon),
+/** Parse a WKT `POINT(lng lat)` (PDOK `centroide_ll` / `geometrie_ll`). */
+function parseWktPoint(wkt) {
+  if (typeof wkt !== 'string') return null
+  const m = /POINT\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i.exec(wkt)
+  if (!m) return null
+  const lng = Number(m[1])
+  const lat = Number(m[2])
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return { lat, lng }
+}
+
+/**
+ * PDOK Locatieserver autocomplete. Returns lightweight suggestions
+ * ({ id, label, type }) — geometry is fetched on selection via lookupPlace().
+ */
+export async function suggestPlaces(query, signal) {
+  const url =
+    `${LOCATIESERVER}/suggest?q=${encodeURIComponent(query)}` +
+    `&fq=${encodeURIComponent(SUGGEST_FQ)}&rows=7`
+  const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`Search failed (${res.status})`)
+  const data = await res.json()
+  const docs = data?.response?.docs ?? []
+  return docs.map((d) => ({
+    id: d.id,
+    type: d.type ?? '',
+    label: d.weergavenaam || d.id,
   }))
+}
+
+/** Resolve a Locatieserver id to a navigable coordinate via centroide_ll. */
+export async function lookupPlace(id, signal) {
+  const url = `${LOCATIESERVER}/lookup?id=${encodeURIComponent(id)}`
+  const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`Lookup failed (${res.status})`)
+  const data = await res.json()
+  const doc = data?.response?.docs?.[0]
+  if (!doc) throw new Error('No match found')
+  const point = parseWktPoint(doc.centroide_ll) || parseWktPoint(doc.geometrie_ll)
+  if (!point) throw new Error('No coordinates for this result')
+  return {
+    lat: point.lat,
+    lng: point.lng,
+    label: doc.weergavenaam || id,
+    type: doc.type ?? '',
+  }
 }

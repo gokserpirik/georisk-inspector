@@ -4,13 +4,21 @@
   "description": "Dutch parcel risk inspector: 2D map with flood overlays plus live valuation, elevation and risk metrics.",
   "author": "gokserpirik",
   "license": "MIT",
-  "keywords": ["vue", "leaflet", "gis", "risk", "netherlands", "pdok"],
+  "keywords": [
+    "vue",
+    "leaflet",
+    "gis",
+    "risk",
+    "netherlands",
+    "pdok"
+  ],
   "private": false,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@turf/bbox": "^7.4.0",
@@ -27,6 +35,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.5"
   }
 }

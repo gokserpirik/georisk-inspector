@@ -29,21 +29,38 @@ const lineEl = ref(null)
 let doughnut = null
 let line = null
 
+const FACTOR_LABELS = {
+  flood: { label: 'Flood', color: '#e63946' },
+  subsidence: { label: 'Subsidence', color: '#e9a13b' },
+  fire: { label: 'Fire', color: '#0071e3' },
+  area: { label: 'Area', color: '#5e5ce6' },
+}
+
+function doughnutData() {
+  const keys = Object.keys(FACTOR_LABELS).filter((k) => k in (props.risks ?? {}))
+  return {
+    labels: keys.map((k) => FACTOR_LABELS[k].label),
+    values: keys.map((k) => Number(props.risks?.[k]) || 0),
+    colors: keys.map((k) => FACTOR_LABELS[k].color),
+  }
+}
+
 function buildCharts() {
-  const { flood, subsidence, fire } = props.risks
+  const { labels, values, colors } = doughnutData()
   doughnut = new Chart(doughnutEl.value, {
     type: 'doughnut',
     data: {
-      labels: ['Flood', 'Subsidence', 'Fire'],
-      datasets: [{ data: [flood, subsidence, fire], backgroundColor: ['#e63946', '#e9a13b', '#0071e3'], borderWidth: 2, borderColor: '#fff' }],
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }],
     },
     options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } },
   })
+  const depreciation = props.depreciation ?? []
   line = new Chart(lineEl.value, {
     type: 'line',
     data: {
-      labels: props.depreciation.map((d) => d.year),
-      datasets: [{ label: 'Value (€)', data: props.depreciation.map((d) => d.value), borderColor: '#0071e3', backgroundColor: 'rgba(0,113,227,0.12)', fill: true, tension: 0.3, pointRadius: 2 }],
+      labels: depreciation.map((d) => d.year),
+      datasets: [{ label: 'Value (€)', data: depreciation.map((d) => d.value), borderColor: '#0071e3', backgroundColor: 'rgba(0,113,227,0.12)', fill: true, tension: 0.3, pointRadius: 2 }],
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => `€${Number(v) / 1000}k` } } } },
   })
@@ -53,17 +70,22 @@ onMounted(buildCharts)
 onUnmounted(() => {
   doughnut?.destroy()
   line?.destroy()
+  doughnut = null
+  line = null
 })
 
 watch(
   () => [props.risks, props.depreciation],
   () => {
     if (!doughnut || !line) return
-    const { flood, subsidence, fire } = props.risks
-    doughnut.data.datasets[0].data = [flood, subsidence, fire]
+    const { labels, values, colors } = doughnutData()
+    doughnut.data.labels = labels
+    doughnut.data.datasets[0].data = values
+    doughnut.data.datasets[0].backgroundColor = colors
     doughnut.update()
-    line.data.labels = props.depreciation.map((d) => d.year)
-    line.data.datasets[0].data = props.depreciation.map((d) => d.value)
+    const depreciation = props.depreciation ?? []
+    line.data.labels = depreciation.map((d) => d.year)
+    line.data.datasets[0].data = depreciation.map((d) => d.value)
     line.update()
   },
   { deep: true },

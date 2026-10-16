@@ -9,3 +9,6 @@ package-lock.json
 
 # macOS metadata
 .DS_Store
+
+# scratch / planning notes (not part of the published app)
+docs/
