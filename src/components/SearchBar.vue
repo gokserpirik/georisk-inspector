@@ -6,18 +6,28 @@
       type="text"
       placeholder="Search a Dutch address, place or parcel…"
       aria-label="Search address, place or parcel"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-controls="search-results"
+      :aria-expanded="focused && results.length > 0"
+      :aria-activedescendant="focused && activeIndex >= 0 ? `search-option-${activeIndex}` : undefined"
       :aria-busy="searching"
       @focus="focused = true"
       @blur="focused = false"
-      @keydown.enter="onEnter"
-      @keydown.escape="results = []"
+      @keydown.down.prevent="moveActive(1)"
+      @keydown.up.prevent="moveActive(-1)"
+      @keydown.enter.prevent="onEnter"
+      @keydown.escape="closeResults"
     />
     <div v-if="focused && searching" class="search-hint">Searching…</div>
-    <div v-else-if="focused && results.length" class="results">
+    <div v-else-if="focused && results.length" id="search-results" class="results" role="listbox" aria-label="Search suggestions">
       <div
         v-for="(r, i) in results"
         :key="`${r.id}-${i}`"
         class="result-item"
+        :id="`search-option-${i}`"
+        role="option"
+        :aria-selected="i === activeIndex"
         @mousedown.prevent
         @click="select(r)"
       >
@@ -26,12 +36,12 @@
       </div>
     </div>
     <div v-else-if="focused && empty" class="search-hint">No matches in the Netherlands.</div>
-    <div v-if="error" class="search-error">{{ error }}</div>
+    <div v-if="error" class="search-error" role="alert">{{ error }}</div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { parseLatLng, suggestPlaces, lookupPlace, isInNetherlands } from '../composables/useGeocoding.js'
 import { useReveal } from '../composables/useReveal.js'
@@ -43,44 +53,74 @@ const error = ref('')
 const searching = ref(false)
 const empty = ref(false)
 const focused = ref(false)
+const activeIndex = ref(-1)
 const rootEl = ref(null)
 const inputEl = ref(null)
 
 let debounceTimer = null
 let aborter = null
+let suppressSearch = false
+
+function cancelPending() {
+  clearTimeout(debounceTimer)
+  aborter?.abort()
+  aborter = null
+  searching.value = false
+}
+
+function closeResults() {
+  cancelPending()
+  results.value = []
+  activeIndex.value = -1
+  empty.value = false
+}
+
+function moveActive(direction) {
+  if (!results.value.length) return
+  activeIndex.value = activeIndex.value < 0
+    ? (direction > 0 ? 0 : results.value.length - 1)
+    : (activeIndex.value + direction + results.value.length) % results.value.length
+}
+
+function setQuery(value) {
+  suppressSearch = true
+  query.value = value
+  suppressSearch = false
+}
 
 function goTo(lat, lng, q) {
+  closeResults()
   router.replace({ path: '/', query: { lat: String(lat), lng: String(lng), q } })
-  results.value = []
-  empty.value = false
   error.value = ''
 }
 
 async function select(place) {
   error.value = ''
   if (Number.isFinite(place.lat) && Number.isFinite(place.lng)) {
-    query.value = place.label
+    setQuery(place.label)
     goTo(place.lat, place.lng, place.label)
     inputEl.value?.blur()
     return
   }
   // Suggestion with an id but no geometry yet: resolve it via lookup.
-  aborter?.abort()
-  aborter = new AbortController()
+  cancelPending()
+  const current = new AbortController()
+  aborter = current
   searching.value = true
   try {
-    const resolved = await lookupPlace(place.id, aborter.signal)
+    const resolved = await lookupPlace(place.id, current.signal)
+    if (aborter !== current) return
     if (!isInNetherlands(resolved.lat, resolved.lng)) {
       error.value = 'Result is outside the Netherlands — the risk model covers NL only.'
       return
     }
-    query.value = resolved.label
+    setQuery(resolved.label)
     goTo(resolved.lat, resolved.lng, resolved.label)
     inputEl.value?.blur()
   } catch (e) {
-    if (e?.name !== 'AbortError') error.value = 'Could not resolve that result. Try again.'
+    if (aborter === current && e?.name !== 'AbortError') error.value = 'Could not resolve that result. Try again.'
   } finally {
-    searching.value = false
+    if (aborter === current) { aborter = null; searching.value = false }
   }
 }
 
@@ -95,12 +135,14 @@ function onEnter() {
     inputEl.value?.blur()
     return
   }
-  if (results.value.length) select(results.value[0])
+  if (results.value.length) select(results.value[activeIndex.value < 0 ? 0 : activeIndex.value])
 }
 
 watch(query, (val) => {
-  clearTimeout(debounceTimer)
-  aborter?.abort()
+  if (suppressSearch) return
+  cancelPending()
+  results.value = []
+  activeIndex.value = -1
   error.value = ''
   empty.value = false
   if (!val || val.trim().length < 3) {
@@ -115,21 +157,25 @@ watch(query, (val) => {
   }
   searching.value = true
   debounceTimer = setTimeout(async () => {
-    aborter = new AbortController()
+    const current = new AbortController()
+    aborter = current
     try {
-      const found = await suggestPlaces(val.trim(), aborter.signal)
+      const found = await suggestPlaces(val.trim(), current.signal)
+      if (aborter !== current) return
       results.value = found
       empty.value = found.length === 0
     } catch (e) {
-      if (e?.name !== 'AbortError') {
+      if (aborter === current && e?.name !== 'AbortError') {
         error.value = 'Search failed. Try again.'
         results.value = []
       }
     } finally {
-      if (!aborter?.signal.aborted) searching.value = false
+      if (aborter === current) { aborter = null; searching.value = false }
     }
   }, 300)
-})
+}, { flush: 'sync' })
+
+onUnmounted(cancelPending)
 
 // Search results stagger (transforms only)
 useReveal((gsap, scope) => {

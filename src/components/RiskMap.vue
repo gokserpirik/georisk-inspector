@@ -3,15 +3,38 @@
     <div v-if="isFallback" class="map-badge" role="status">
       Offline / Fallback Mode — parcel data unavailable
     </div>
-    <button
-      type="button"
-      class="map-toggle"
-      :class="{ active: showAhn }"
-      :aria-pressed="showAhn"
-      @click="showAhn = !showAhn"
-    >
-      {{ showAhn ? 'Hide' : 'Show' }} AHN elevation
-    </button>
+    <div v-else-if="parcel?.incomplete || parcel?.match === 'nearest-centroid'" class="map-badge" role="status">
+      {{ parcel?.incomplete ? 'Parcel results incomplete' : 'Approximate parcel match' }}
+    </div>
+    <div class="map-demo-note">Flood overlays are fictional. The selected parcel is outlined in red.</div>
+    <div class="map-controls" aria-label="Map overlays">
+      <button
+        type="button"
+        class="map-toggle"
+        :class="{ active: showAhn }"
+        :aria-pressed="showAhn"
+        @click="showAhn = !showAhn"
+      >
+        {{ showAhn ? 'Hide' : 'Show' }} AHN elevation
+      </button>
+      <button
+        type="button"
+        class="map-toggle"
+        :class="{ active: showNatureAreas }"
+        :aria-pressed="showNatureAreas"
+        :aria-describedby="showNatureAreas ? 'nature-area-note' : undefined"
+        @click="toggleNatureAreas"
+      >
+        {{ showNatureAreas ? 'Hide' : 'Show' }} nature areas
+      </button>
+      <div v-if="showNatureAreas" id="nature-area-note" class="map-layer-note">
+        <strong>Combustible nature areas</strong> · IPO / Risicokaart
+        <p><span class="nature-swatch" aria-hidden="true"></span> Green hatching: mapped nature area</p>
+        <p>Mapped large nature areas (at least 100 ha). Not current fire danger or a property risk assessment. An unshaded area is not necessarily safe.</p>
+        <a href="https://data.overheid.nl/dataset/13235-natuurbranden" target="_blank" rel="noopener noreferrer">Dataset &amp; limitations</a>
+        <p v-if="natureLayerError" role="status" class="map-layer-error">Some map tiles failed to load. The layer may be incomplete; turn it off and on to retry.</p>
+      </div>
+    </div>
     <l-map
       :zoom="zoom"
       :center="center"
@@ -37,6 +60,19 @@
         transparent
         :opacity="0.65"
         attribution="AHN &copy; PDOK / Rijkswaterstaat"
+      />
+      <l-wms-tile-layer
+        v-if="showNatureAreas"
+        url="https://servicespub.risicokaart.nl/geoserver/ISOR_RK/wms"
+        layers="ISOR_RK:isor_brandbaar_natuurgebied"
+        format="image/png"
+        styles=""
+        version="1.1.1"
+        transparent
+        :opacity="0.7"
+        :max-zoom="19"
+        attribution="Nature areas: IPO / Risicokaart"
+        @tileerror="natureLayerError = true"
       />
       <l-geo-json
         :key="'flood'"
@@ -81,6 +117,13 @@ const paneEl = ref(null)
 // internal _leaflet_pos bookkeeping during zoom/pan.
 const mapInstance = shallowRef(null)
 const showAhn = ref(false)
+const showNatureAreas = ref(false)
+const natureLayerError = ref(false)
+
+function toggleNatureAreas() {
+  showNatureAreas.value = !showNatureAreas.value
+  natureLayerError.value = false
+}
 
 const parcelGeojson = computed(() => props.parcel?.geojson ?? null)
 const parcelKey = computed(() => `${props.lat.toFixed(6)},${props.lng.toFixed(6)}`)
@@ -130,10 +173,15 @@ const parcelOptions = {
     const p = feature?.properties ?? {}
     if (p.kadastraleGemeenteWaarde) {
       const area = Number(p.kadastraleGrootteWaarde)
-      layer.bindPopup(
-        `<strong>${p.kadastraleGemeenteWaarde} ${p.sectie}-${p.perceelnummer}</strong>` +
-          (Number.isFinite(area) ? `<br>${Math.round(area).toLocaleString('en-US')} m²` : ''),
-      )
+      // WFS properties are external data: never interpolate them into HTML.
+      const content = document.createElement('div')
+      const title = document.createElement('strong')
+      title.textContent = `${p.kadastraleGemeenteWaarde} ${p.sectie ?? '—'}-${p.perceelnummer ?? '—'}`
+      content.append(title)
+      if (p.kadastraleGrootteWaarde != null && String(p.kadastraleGrootteWaarde).trim() !== '' && Number.isFinite(area) && area > 0) {
+        content.append(document.createElement('br'), document.createTextNode(`${Math.round(area).toLocaleString('en-US')} m²`))
+      }
+      layer.bindPopup(content)
     }
     layer.on('mouseover', () => layer.setStyle({ weight: 3, fillOpacity: 0.24 }))
     layer.on('mouseout', () =>

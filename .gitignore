@@ -4,6 +4,10 @@ node_modules/
 # build output (regenerate via pnpm run build)
 dist/
 
+# Playwright artifacts (may contain captured page content)
+test-results/
+playwright-report/
+
 # lockfile not in use (pnpm-lock.yaml is canonical)
 package-lock.json
 

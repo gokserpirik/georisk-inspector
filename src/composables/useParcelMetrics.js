@@ -51,12 +51,18 @@ export function useParcelMetrics(latRef, lngRef, parcelRef = null) {
   const stopWatch = watch(
     [() => unref(latRef), () => unref(lngRef), () => (parcelRef ? unref(parcelRef) : null)],
     ([newLat, newLng, parcel]) => {
+      currentController?.abort()
+      currentController = null
+      debouncedFetch.cancel()
+      data.value = null
+      error.value = null
+      loading.value = !!parcel
       // Wait for the parcel (live or fallback) before scoring, so the area
       // factor and its source label are accurate on the first render.
-      if (!parcel) return
+      if (parcelRef && !parcel) return
       debouncedFetch(newLat, newLng, parcel)
     },
-    { immediate: true },
+    { immediate: true, flush: 'sync' },
   )
 
   onUnmounted(() => {

@@ -1,7 +1,7 @@
 {
   "name": "georisk-inspector",
-  "version": "0.1.0",
-  "description": "Dutch parcel risk inspector: 2D map with flood overlays plus live valuation, elevation and risk metrics.",
+  "version": "0.2.0-beta.1",
+  "description": "Dutch parcel risk inspector: 2D map with flood overlays, AHN elevation, an optional 3D slice and heuristic risk metrics.",
   "author": "gokserpirik",
   "license": "MIT",
   "keywords": [
@@ -18,7 +18,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@turf/bbox": "^7.4.0",
@@ -26,14 +27,17 @@
     "@vue-leaflet/vue-leaflet": "^0.10.1",
     "chart.js": "^4.5.1",
     "flatbush": "^4.6.2",
+    "geotiff": "^3.0.5",
     "gsap": "^3.15.0",
     "leaflet": "^1.9.4",
     "proj4": "^2.22.0",
+    "three": "^0.186.1",
     "vue": "^3.5.42",
     "vue-chartjs": "^5.3.4",
     "vue-router": "^5.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "vite": "^8.3.0",
     "vitest": "^5.0.5"

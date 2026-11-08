@@ -27,6 +27,7 @@
 
       <div class="card drawer-card">
         <h3>Cadastral parcel</h3>
+        <div v-if="parcel?.match === 'contains'" class="coords">Confirmed: click lies within this parcel.</div>
         <template v-if="cadastre">
           <div class="metric-row">
             <span class="label">Municipality</span>
@@ -43,45 +44,45 @@
             </span>
           </div>
           <div v-if="parcel?.match === 'nearest-centroid'" class="coords">
-            nearest parcel — click landed on a boundary{{ parcel?.distanceM ? ` (${parcel.distanceM} m)` : '' }}
+            Approximate match: nearest parcel centroid{{ parcel?.distanceM != null ? ` (${parcel.distanceM} m away)` : '' }}. The click is not inside this parcel.
           </div>
         </template>
+        <div v-else-if="isFallback" class="coords">Parcel data unavailable. Try again when the service is reachable.</div>
+        <div v-else-if="parcel?.incomplete" class="coords">Parcel lookup incomplete; no approximate match was selected.</div>
         <div v-else class="coords">No cadastral parcel at this point (road, water or outside NL).</div>
+        <div v-if="parcel?.incomplete" class="coords">Parcel results are incomplete for this area.</div>
       </div>
 
       <div class="card drawer-card">
-        <h3>Valuation &amp; Elevation</h3>
-        <div class="metric-row">
-          <span class="label">Estimate</span>
-          <span class="value">€{{ animatedValuation }}</span>
-        </div>
+        <h3>Elevation</h3>
         <div class="metric-row">
           <span class="label">Elevation (NAP)</span>
           <span class="value" :title="metrics.elevationSource ? `Source: ${metrics.elevationSource}` : ''">
-            {{ Number(metrics.elevation ?? 0).toFixed(1) }} m NAP
-            <span v-if="metrics.isMockElevation" class="badge mock" title="Live PDOK lookup failed — showing mock elevation">mock data</span>
+            {{ metrics.elevation == null ? 'Unavailable' : `${metrics.elevation.toFixed(1)} m NAP` }}
           </span>
         </div>
       </div>
 
       <div class="card drawer-card">
         <h3>Heuristic Risk Index (Prototype)</h3>
+        <p class="coords">Uses fictional Rotterdam demo polygons and unvalidated proxy scores; outside a demo polygon does not mean safe. Not a regulatory or actuarial assessment.</p>
+        <p v-if="metrics.elevation == null" class="coords">Elevation unavailable; elevation-dependent scores and the overall index are withheld.</p>
         <div v-for="item in riskItems" :key="item.id" class="risk-bar">
           <div class="bar-head">
             <span>{{ item.label }}</span>
-            <strong>{{ item.subScore }}/100</strong>
+            <strong>{{ item.subScore == null ? 'Unavailable' : `${item.subScore}/100` }}</strong>
           </div>
           <div class="bar-track">
             <div
               class="bar-fill risk-fill"
               :data-risk="item.id"
-              :style="{ background: item.color, transform: `scaleX(${item.subScore / 100})` }"
+              :style="{ background: item.color, transform: `scaleX(${(item.subScore ?? 0) / 100})` }"
             ></div>
           </div>
         </div>
         <div class="metric-row">
           <span class="label">Overall (Σ wᵢ·sᵢ)</span>
-          <span class="value">{{ metrics.overall }}/100</span>
+          <span class="value">{{ metrics.overall == null ? 'Unavailable' : `${metrics.overall}/100` }}</span>
         </div>
       </div>
 
@@ -103,7 +104,7 @@
                 </td>
                 <td>{{ f.rawValue ?? '—' }}{{ f.unit ? ` ${f.unit}` : '' }}</td>
                 <td>{{ f.weight.toFixed(2) }}</td>
-                <td>{{ f.subScore }}</td>
+                <td>{{ f.subScore ?? '—' }}</td>
                 <td :class="f.source === 'PDOK Kadaster WFS' ? 'src-live' : 'src-proxy'">{{ f.source }}</td>
               </tr>
             </tbody>
@@ -115,14 +116,13 @@
         </div>
       </div>
 
-      <RiskChart :risks="metrics.risks" :depreciation="metrics.depreciation" :key="metricsKey" />
+      <RiskChart v-if="metrics.overall != null" :risks="metrics.risks" :key="metricsKey" />
     </template>
   </aside>
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue'
-import RiskChart from './RiskChart.vue'
+import { computed, ref, watch, nextTick, defineAsyncComponent } from 'vue'
 import { gsap } from '../lib/gsap.js'
 import { useReveal } from '../composables/useReveal.js'
 
@@ -135,9 +135,10 @@ const props = defineProps({
   error: { type: String, default: '' },
 })
 
+const RiskChart = defineAsyncComponent(() => import('./RiskChart.vue'))
+
 const rootEl = ref(null)
 const badgeEl = ref(null)
-const animatedValuation = ref('—')
 const showMethod = ref(false)
 
 const FACTOR_COLORS = { flood: '#e63946', subsidence: '#e9a13b', fire: '#0071e3', area: '#5e5ce6' }
@@ -153,24 +154,12 @@ const riskItems = computed(() => {
   return breakdown.map((f) => ({ ...f, color: FACTOR_COLORS[f.id] ?? '#457b9d' }))
 })
 
-function countUp(to) {
-  const from = Number(String(animatedValuation.value).replace(/[^0-9]/g, '')) || 0
-  const obj = { v: from }
-  gsap.to(obj, {
-    v: to,
-    duration: 0.6,
-    snap: { v: 1000 },
-    onUpdate: () => {
-      animatedValuation.value = Math.round(obj.v).toLocaleString('en-US')
-    },
-  })
-}
-
 function animateBars() {
   nextTick(() => {
     const fills = rootEl.value?.querySelectorAll('.risk-fill')
-    if (fills?.length && props.metrics)
-      gsap.fromTo(fills, { scaleX: 0 }, { scaleX: (i, el) => Number(el.dataset.risk ? (props.metrics.risks?.[el.dataset.risk] ?? 0) / 100 : 1), duration: 0.6, stagger: 0.08, clearProps: 'transform' })
+    const risks = props.metrics?.risks
+    if (fills?.length && risks)
+      gsap.fromTo(fills, { scaleX: 0 }, { scaleX: (i, el) => Number(el.dataset.risk ? (risks[el.dataset.risk] ?? 0) / 100 : 1), duration: 0.6, stagger: 0.08 })
   })
 }
 
@@ -181,7 +170,6 @@ function pulseBadge() {
 
 function refreshDrawer(m) {
   if (!m) return
-  countUp(m.valuation)
   animateBars()
   nextTick(() => {
     const cards = rootEl.value?.querySelectorAll('.drawer-card')

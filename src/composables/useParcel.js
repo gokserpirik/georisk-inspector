@@ -1,6 +1,7 @@
 import { ref, watch, unref, onUnmounted } from 'vue'
 import { booleanPointInPolygon } from '@turf/boolean-point-in-polygon'
 import { isInNetherlands } from './useGeocoding.js'
+import { rdDistance, wgs84ToRd } from '../lib/rd.js'
 
 // PDOK Kadastrale Kaart WFS v5 — keyless, CORS-enabled. `srsName=EPSG:4326` with a
 // CRS84 bbox suffix keeps the coordinates in lon,lat (matching Leaflet/turf). A
@@ -10,6 +11,7 @@ const WFS_URL = 'https://service.pdok.nl/kadaster/kadastralekaart/wfs/v5_0'
 const BBOX_CRS = 'urn:ogc:def:crs:OGC:1.3:CRS84'
 const BBOX_PAD_DEG = 0.00025 // ~28 m north/south; widened in longitude by cos(lat)
 const WFS_COUNT = 25
+const MAX_PAGES = 10
 // A click that lands on a shared parcel boundary (or a narrow road sliver) has
 // no single containing polygon. We then fall back to the nearest parcel
 // centroid — but only within this radius, so clicks on open water/roads still
@@ -35,14 +37,14 @@ function buildBbox(lat, lng) {
   return `${box},${BBOX_CRS}`
 }
 
-export function buildParcelUrl(lat, lng) {
+export function buildParcelUrl(lat, lng, startIndex = 0) {
   return (
     `${WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
     '&typeName=kadastralekaartv5:perceel' +
     '&outputFormat=application/json' +
     '&srsName=EPSG:4326' +
     `&bbox=${buildBbox(lat, lng)}` +
-    `&count=${WFS_COUNT}`
+    `&count=${WFS_COUNT}&startIndex=${startIndex}`
   )
 }
 
@@ -94,12 +96,11 @@ function featureCentroid(feature) {
   return best
 }
 
-/** Rough metres between two [lng, lat] points (equirectangular — fine at parcel scale). */
+/** Metres between two [lng, lat] points, measured in RD (a metric projection). */
 function metresBetween(a, b) {
-  const mPerLat = 111320
-  const mPerLng = mPerLat * Math.cos((a[1] * Math.PI) / 180)
-  return Math.hypot((b[0] - a[0]) * mPerLng, (b[1] - a[1]) * mPerLat)
+  return rdDistance(wgs84ToRd(a), wgs84ToRd(b))
 }
+
 
 /**
  * Choose the parcel for a clicked [lng, lat]:
@@ -137,8 +138,9 @@ export function pickParcel(features, lat, lng) {
 export function parseParcel(feature) {
   if (!feature) return { properties: null, area: null }
   const p = feature.properties ?? {}
-  const area = Number(p.kadastraleGrootteWaarde)
-  const hasArea = Number.isFinite(area)
+  const rawArea = p.kadastraleGrootteWaarde
+  const area = Number(rawArea)
+  const hasArea = rawArea != null && String(rawArea).trim() !== '' && Number.isFinite(area) && area > 0
   return {
     properties: {
       id: [p.kadastraleGemeenteCode, p.sectie, p.perceelnummer].filter(Boolean).join('-') || null,
@@ -160,20 +162,33 @@ function fallbackResult(reason) {
 
 async function fetchParcel(lat, lng, signal) {
   if (!isInNetherlands(lat, lng)) return fallbackResult('outside-nl')
-  const res = await fetch(buildParcelUrl(lat, lng), { signal, headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error(`Kadaster WFS ${res.status}`)
-  const geojson = await res.json()
-  const features = geojson?.features ?? []
-  const picked = pickParcel(features, lat, lng)
+  const features = []
+  let complete = false
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await fetch(buildParcelUrl(lat, lng, page * WFS_COUNT), { signal, headers: { Accept: 'application/json' } })
+    if (!res.ok) throw new Error(`Kadaster WFS ${res.status}`)
+    const json = await res.json()
+    if (json?.type !== 'FeatureCollection' || !Array.isArray(json.features)) throw new Error('Invalid Kadaster response')
+    features.push(...json.features)
+    if (json.features.length < WFS_COUNT || (Number.isFinite(json.numberMatched) && features.length >= json.numberMatched)) {
+      complete = true
+      break
+    }
+  }
+  const geojson = { type: 'FeatureCollection', features }
+  let picked = pickParcel(features, lat, lng)
+  // An approximate match is unsafe if the service returned only part of the area.
+  if (!complete && picked?.match !== 'contains') picked = null
   const { properties, area } = parseParcel(picked?.feature)
   return {
-    geojson: geojson?.type === 'FeatureCollection' ? geojson : EMPTY_GEOJSON,
+    geojson,
     properties,
     area,
     match: picked?.match ?? null,
     distanceM: picked?.distanceM ?? null,
     isFallback: false,
-    reason: picked ? null : 'no-containing-parcel',
+    incomplete: !complete,
+    reason: picked ? null : complete ? 'no-containing-parcel' : 'incomplete-results',
   }
 }
 
@@ -214,8 +229,15 @@ export function useParcel(latRef, lngRef) {
 
   const stopWatch = watch(
     [() => unref(latRef), () => unref(lngRef)],
-    ([lat, lng]) => debouncedRun(lat, lng),
-    { immediate: true },
+    ([lat, lng]) => {
+      controller?.abort()
+      controller = null
+      data.value = null
+      error.value = null
+      loading.value = lat != null && lng != null
+      debouncedRun(lat, lng)
+    },
+    { immediate: true, flush: 'sync' },
   )
 
   onUnmounted(() => {
