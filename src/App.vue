@@ -1,8 +1,9 @@
 <template>
   <div class="app" ref="rootEl">
     <header class="app-header" ref="headerEl">
-      <div class="brand">GeoRisk <span>Inspector</span></div>
-      <SearchBar />
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>GeoRisk <span>Inspector</span></div>
+      <div class="header-context">Dutch parcel workspace <span aria-hidden="true">/</span> <strong>{{ label || 'Selected location' }}</strong></div>
+      <button type="button" class="header-action" @click="shareLocation">{{ copied ? 'Link copied' : 'Share view' }}</button>
       <button
         type="button"
         class="btn-3d"
@@ -14,23 +15,32 @@
         3D slice
       </button>
     </header>
-    <div class="app-body">
+    <div class="app-body" :class="`view-${mobileView}`">
+      <section class="inspector-panel" aria-label="Parcel inspection">
+        <div class="panel-intro">
+          <div class="panel-title-row"><h1>Parcel inspector</h1><span class="panel-region">Netherlands</span></div>
+          <p>Explore a location and inspect its cadastral and terrain context.</p>
+          <SearchBar />
+        </div>
+        <MetricsDrawer
+          ref="drawerEl"
+          :metrics="metricsData"
+          :parcel="parcelData"
+          :is-fallback="isFallback"
+          :label="label"
+          :loading="loading"
+          :error="error"
+        />
+        <div class="panel-footer"><span class="status-dot" :class="{ degraded: isFallback }" aria-hidden="true"></span> {{ isFallback ? 'Parcel data unavailable' : 'PDOK data where available' }} <span>·</span> Prototype risk model</div>
+      </section>
       <RiskMap
         ref="mapEl"
         :lat="lat"
         :lng="lng"
         :parcel="parcelData"
         :is-fallback="isFallback"
+        :active="mobileView === 'map'"
         @select="onSelect"
-      />
-      <MetricsDrawer
-        ref="drawerEl"
-        :metrics="metricsData"
-        :parcel="parcelData"
-        :is-fallback="isFallback"
-        :label="label"
-        :loading="loading"
-        :error="error"
       />
       <ParcelSlice3D
         v-if="show3d"
@@ -40,11 +50,15 @@
         @close="toggle3d"
       />
     </div>
+    <nav class="mobile-switch" aria-label="Inspector views">
+      <button type="button" :class="{ active: mobileView === 'list' }" :aria-current="mobileView === 'list' ? 'page' : undefined" @click="mobileView = 'list'">List</button>
+      <button type="button" :class="{ active: mobileView === 'map' }" :aria-current="mobileView === 'map' ? 'page' : undefined" @click="mobileView = 'map'">Map</button>
+    </nav>
   </div>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SearchBar from './components/SearchBar.vue'
 import MetricsDrawer from './components/MetricsDrawer.vue'
@@ -61,6 +75,22 @@ const RiskMap = defineAsyncComponent(() => import('./components/RiskMap.vue'))
 const route = useRoute()
 const router = useRouter()
 const rootEl = ref(null)
+const mobileView = ref('list')
+const copied = ref(false)
+let copyTimer
+onUnmounted(() => clearTimeout(copyTimer))
+
+async function shareLocation() {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    copied.value = true
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    // Clipboard access can be unavailable in non-secure contexts.
+    copied.value = false
+  }
+}
 
 const lat = computed(() => {
   const v = Number(route.query.lat)
@@ -103,6 +133,7 @@ function onSelect(point) {
   const query = { lat: point.lat.toFixed(6), lng: point.lng.toFixed(6) }
   if (show3d.value) query.view = '3d'
   router.replace({ path: '/', query })
+  mobileView.value = 'list'
 }
 
 // Boot timeline: header -> map -> drawer cards stagger (transforms/autoAlpha only).

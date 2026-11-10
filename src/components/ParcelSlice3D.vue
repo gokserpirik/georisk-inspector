@@ -193,21 +193,21 @@ onBeforeUnmount(() => {
 .slice-panel {
   position: absolute;
   inset: 0;
-  z-index: 1200;
+  z-index: 1400;
   display: flex;
   flex-direction: column;
-  background: #eef2f5;
+  background: #e8e7df;
 }
 .slice-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  background: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
 }
 .slice-meta {
-  color: #6b7280;
+  color: var(--muted);
   font-size: 0.85rem;
 }
 .slice-close {
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   padding: 8px 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--card);
   font-size: 0.9rem;
 }
 .error-state {

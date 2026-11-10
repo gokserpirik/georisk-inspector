@@ -70,12 +70,17 @@ test('mobile map and search remain usable without horizontal overflow', async ({
   await page.setViewportSize({ width: 390, height: 844 })
   await mockServices(page)
   await page.goto('/')
+  await expect(page.getByRole('combobox', { name: 'Search address, place or parcel' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'List', exact: true })).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('button', { name: 'Map', exact: true }).click()
   const map = page.locator('.leaflet-container')
   await expect(map).toBeVisible()
   await expect(page.getByText('Flood overlays are fictional. The selected parcel is outlined in red.')).toBeVisible()
   await expect.poll(async () => (await map.boundingBox())?.height).toBeGreaterThan(300)
-  expect((await page.getByRole('combobox').boundingBox()).width).toBeGreaterThan(250)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('button', { name: 'List', exact: true }).click()
+  expect((await page.getByRole('combobox').boundingBox()).width).toBeGreaterThan(250)
+  await expect(page.locator('.drawer')).toBeVisible()
 })
 
 test('external parcel properties are rendered as text in the map popup', async ({ page }) => {
