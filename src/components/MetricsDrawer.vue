@@ -13,6 +13,7 @@
     <template v-else-if="metrics">
       <div class="card drawer-card">
         <h3>Parcel</h3>
+        <div class="parcel-name">{{ cadastre?.gemeente ? `${cadastre.gemeente} · ${cadastre.sectie || '—'}-${cadastre.perceelnummer ?? '—'}` : (label || 'Selected location') }}</div>
         <div class="metric-row">
           <span class="label">Risk band</span>
           <span class="badge" :class="metrics.riskBand" ref="badgeEl">{{ metrics.riskBand }}</span>

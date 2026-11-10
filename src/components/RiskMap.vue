@@ -106,6 +106,7 @@ const props = defineProps({
   lng: { type: Number, required: true },
   parcel: { type: Object, default: null },
   isFallback: { type: Boolean, default: false },
+  active: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['select'])
@@ -195,6 +196,12 @@ function onMapReady(map) {
   // Click anywhere to inspect the cadastral parcel at that point.
   map.on('click', (e) => emit('select', { lat: e.latlng.lat, lng: e.latlng.lng }))
 }
+
+watch(() => props.active, async (active) => {
+  if (!active) return
+  await nextTick()
+  mapInstance.value?.invalidateSize()
+})
 
 function popMarker() {
   nextTick(() => {

@@ -9,7 +9,7 @@ Built with Vite + Vue 3 + vue-leaflet (OpenStreetMap tiles, no API keys) +
 Chart.js + GSAP + Three.js. Live data comes from **PDOK** (Locatieserver + Kadaster +
 AHN + BAG).
 
-![GeoRisk Inspector screenshot](screenshots/georisk-vue.jpg)
+![GeoRisk Inspector's parcel sidebar beside the live map](screenshots/georisk-vue.jpg)
 
 > **Netherlands only.** The risk model uses the Dutch RD New projection (EPSG:28992),
 > PDOK elevation data, and Dutch soil/flood logic. Search and coordinates are restricted
@@ -42,6 +42,11 @@ Search a Dutch address, place or parcel (via PDOK Locatieserver autocomplete) or
 `lat,lng`. **Click anywhere on the map** to inspect the cadastral parcel at that point.
 The selection is encoded in the URL (`?lat=&lng=&q=`), so any view is shareable and
 survives reload. Opening the 3D slice adds `view=3d` to the URL.
+
+The redesigned workspace keeps parcel identity, elevation, and prototype factors in an
+independently scrolling sidebar next to the live map. On screens 800px wide or narrower,
+use the persistent **List / Map** switch; the selected location and map layers persist
+between views. **Share view** copies the current URL when clipboard access is available.
 
 ## Heuristic Risk Index (Prototype)
 
